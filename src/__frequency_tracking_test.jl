@@ -42,6 +42,7 @@ k0 = 100*(ω)^2
 #Test missing data after stabilization
 dy = [0; diff(y)]./Δt
 Y  = [dy'; y']
+Y[:,200] .= NaN
 Y[1,500] = NaN
 Y[2,501] = NaN
 
