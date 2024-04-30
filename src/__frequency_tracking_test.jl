@@ -37,7 +37,7 @@ const Δt = 0.1
 N  = 1000
 σ  = 0.3
 y  = sin.((1:N).*ω) .+ σ*randn(N)
-k0 = (ω)^2
+k0 = 100*(ω)^2
 
 #Test missing data after stabilization
 dy = [0; diff(y)]./Δt
@@ -60,9 +60,9 @@ oscillator_observation(X, u) = X[1:2]
 
 
 σ₊  = (σ+0.1)
-vsQ = [0.001*σ₊/Δt, 0.01*σ₊, 0.1]
+vsQ = [0.01*σ₊/Δt, 0.0001*σ₊, 0.1]
 vsR = [σ₊/Δt, σ₊]
-vsP = [100*σ₊/Δt, 100*σ₊, 10]
+vsP = [10*σ₊/Δt, 10*σ₊, 10]
 
 model = StateSpaceModel(
     fxu = oscillator_prediction,
