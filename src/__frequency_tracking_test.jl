@@ -36,11 +36,14 @@ const Δt = 0.1
 ω  = 2π/50
 N  = 1000
 σ  = 0.3
-Y  = sin.((1:N).*ω) .+ σ*randn(N)
+y  = sin.((1:N).*ω) .+ σ*randn(N)
 k0 = (ω)^2
 
 #Test missing data after stabilization
-Y[500] = NaN
+dy = [0; diff(y)]./Δt
+Y  = [dy'; y']
+Y[1,500] = NaN
+Y[2,501] = NaN
 
 function oscillator_prediction(X, u)
     k = exp(X[3])
@@ -49,17 +52,17 @@ function oscillator_prediction(X, u)
         1   0   0;
         0   0   0 
     ]
-    return exp(A*Δt)*X .- [0, 0, 0.5*Δt]
+    return exp(A*Δt)*X 
 end
 
-oscillator_observation(X, u) = [X[2]]
-#oscillator_observation = ([0 1 0], zeros(1,0))
+oscillator_observation(X, u) = X[1:2]
+#oscillator_observation = ([1 0 0 ; 0 1 0], zeros(2,0))
 
 
 σ₊  = (σ+0.1)
-vsQ = [0.1*ω, 0.1*σ₊, 0.1]
-vsR = [σ]
-vsP = [100*σ₊, 100*σ₊, 10]
+vsQ = [0.001*σ₊/Δt, 0.01*σ₊, 0.1]
+vsR = [σ₊/Δt, σ₊]
+vsP = [100*σ₊/Δt, 100*σ₊, 10]
 
 model = StateSpaceModel(
     fxu = oscillator_prediction,
@@ -86,21 +89,21 @@ state = GaussianState(
 vs = [GaussianState(model)]
 
 for ii in 1:N
-    kalman_filter!(model, [Y[ii]], Float64[])
+    kalman_filter!(model, Y[:,ii], Float64[])
     push!(vs, GaussianState(model))
 end
 
 using PythonPlot; pygui(true)
 figure()
-plot(Y, ".k")
+plot(y, ".k")
 plot([s.x[1] for s in vs[1:(end-1)]])
 plot([s.x[2] for s in vs[1:(end-1)]])
 plot([sqrt( min(5*σ, s.x[1]^2/exp(s.x[3])) + s.x[2]^2) for s in vs[1:(end-1)]]) #amplitude-equivalent energy
 legend(["measured", "velocity", "position", "energy amplitude"])
-title("Frequency Tracking Summary: EKF")
+title("Frequency Tracking Summary: UKF")
 
 figure()
-title("Frequency Tracking Raw State: EKF")
+title("Frequency Tracking Raw State: UKF")
 labels = ["velocity", "position", "log spring"]
 for ii in 1:3
     subplot(3,1,ii)
