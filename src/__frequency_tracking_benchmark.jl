@@ -38,8 +38,9 @@ end
 
 using FiniteDifferences
 function kalman_filter(s::GaussianState, y, u, Δt, m::LinearStateSpaceModel)
-    x0 = oscillator_prediction(s.x, u, Δt)
     f(x) = oscillator_prediction(x, u, Δt)
+    x0 = oscillator_prediction(s.x, u, Δt)
+    
     Ae = jacobian(central_fdm(5, 1), f, s.x)[1]
     P0 = Ae*s.P*Ae' + m.Q
 

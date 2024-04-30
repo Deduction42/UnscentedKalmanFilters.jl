@@ -18,68 +18,58 @@ tfd = tf([1, -(1+ρ²)cos(Ω₀), ρ²], [1, -2cos(Ω₀), 1], 1.0)
 using StaticArrays
 using LinearAlgebra
 
-#include(joinpath(@__DIR__, "_StateSpaceModel.jl"))
+include(joinpath(@__DIR__, "_StateSpaceModel.jl"))
 
-
-
-#Quick test using my own kalman filter
 @kwdef struct GaussianState
     x :: Vector{Float64}
-    P :: Hermitian{Float64, Matrix{Float64}}
+    P :: Matrix{Float64}
 end
 
-@kwdef struct LinearStateSpaceModel
-    A :: Matrix{Float64}
-    B :: Matrix{Float64}
-    C :: Matrix{Float64}
-    Q :: Hermitian{Float64, Matrix{Float64}}
-    R :: Hermitian{Float64, Matrix{Float64}}
+function GaussianState(model::StateSpaceModel)
+    return GaussianState(
+        x = deepcopy(model.x),
+        P = model.PU'model.PU
+    )
 end
 
-using FiniteDifferences
-function kalman_filter(s::GaussianState, y, u, Δt, m::LinearStateSpaceModel)
-    x0 = oscillator_prediction(s.x, u, Δt)
-    f(x) = oscillator_prediction(x, u, Δt)
-    Ae = jacobian(central_fdm(5, 1), f, s.x)[1]
-    P0 = Ae*s.P*Ae' + m.Q
+const Δt = 0.1
+ω  = 2π/50
+N  = 1000
+σ  = 0.3
+Y  = sin.((1:N).*ω) .+ σ*randn(N)
+k0 = (ω)^2
 
-    z  = y .- m.C*x0
-    S  = Hermitian(m.C*P0*m.C' + m.R)
-    K  = (P0*m.C')/S
-    x1 = x0 + K*z
-    P1 = (I-K*m.C)*P0
-    return GaussianState(x1, Hermitian(0.5*(P1 + P1')))
-end
+#Test missing data after stabilization
+Y[500] = NaN
 
-
-
-
-function oscillator_prediction(X, u, Δt)
+function oscillator_prediction(X, u)
     k = exp(X[3])
     A = [
         0  -k   0;
         1   0   0;
         0   0   0 
     ]
-    return exp(A*Δt)*X .- [0, 0, 0.1*Δt]
+    return exp(A*Δt)*X .- [0, 0, 0.5*Δt]
 end
 
-function oscillator_observation(X)
-    return [X[2]]
-end
+oscillator_observation(X, u) = [X[2]]
+#oscillator_observation = ([0 1 0], zeros(1,0))
 
-ω  = 2π/50
-N  = 1000
-Δt = 0.1
-σ  = 0.3
-Y  = sin.((1:N).*ω) .+ σ*randn(N)
-k0 = 1/(ω)^2
 
 σ₊  = (σ+0.1)
 vsQ = [0.1*ω, 0.1*σ₊, 0.1]
 vsR = [σ]
 vsP = [100*σ₊, 100*σ₊, 10]
 
+model = StateSpaceModel(
+    fxu = oscillator_prediction,
+    hxu = oscillator_observation,
+    x  = [0, 0, log(k0)],
+    QU = Diagonal(vsQ),
+    RU = Diagonal(vsR),
+    PU = Diagonal(vsP),
+)
+#=
 model = LinearStateSpaceModel(
     A = zeros(3,3),
     B = zeros(3,1),
@@ -87,18 +77,17 @@ model = LinearStateSpaceModel(
     Q = Hermitian(Diagonal(vsQ.^2)),
     R = Hermitian(Diagonal(vsR.^2))
 )
-
 state = GaussianState(
     x = [0, 0, log(k0)],
     P = Hermitian(Diagonal(vsP.^2))
 )
+=#
 
-
-vs = [state]
+vs = [GaussianState(model)]
 
 for ii in 1:N
-    newstate = kalman_filter(vs[ii], Y[ii], [0.0], Δt, model)
-    push!(vs, newstate)
+    kalman_filter!(model, [Y[ii]], Float64[])
+    push!(vs, GaussianState(model))
 end
 
 using PythonPlot; pygui(true)

@@ -37,13 +37,13 @@ LinearPredictor = Tuple{<:AbstractArray,<:AbstractArray}
 StatePredictor  = Union{Function, LinearPredictor}
 
 Base.@kwdef struct StateSpaceModel{T<:Real, F1<:StatePredictor, F2<:StatePredictor}
-    fx ::   F1
-    hx ::   F2
-    x  ::   Vector{T}
-    QU ::   UpperTriangular{T, Matrix{T}}
-    RU ::   UpperTriangular{T, Matrix{T}}
-    PU ::   UpperTriangular{T, Matrix{T}}
-    θ  ::   SigmaParams = SigmaParams()
+    fxu ::   F1
+    hxu ::   F2
+    x   ::   Vector{T}
+    QU  ::   UpperTriangular{T, Matrix{T}}
+    RU  ::   UpperTriangular{T, Matrix{T}}
+    PU  ::   UpperTriangular{T, Matrix{T}}
+    θ   ::   SigmaParams = SigmaParams()
 end
 
 function StateSpaceModel(fx::F1, hx::F2, x, QU, RU, PU, θ) where {F1,F2}
@@ -132,8 +132,8 @@ end
 """
 Predict the observation given a state
 """
-predict_observation(SS::StateSpaceModel{<:Real, <:Any, <:LinearPredictor}, u) = SS.hx[1]*SS.x + SS.hx[2]*u
-predict_observation(SS::StateSpaceModel{<:Real, <:Any, <:Function}, u) = SS.hx(SS.x, u)
+predict_observation(SS::StateSpaceModel{<:Real, <:Any, <:LinearPredictor}, u) = SS.hxu[1]*SS.x + SS.hxu[2]*u
+predict_observation(SS::StateSpaceModel{<:Real, <:Any, <:Function}, u) = SS.hxu(SS.x, u)
 
 """
 In-place state update with automatic handling of missing observations; returns intermediate results for troubleshooting
@@ -169,7 +169,7 @@ function predict_state(SS::StateSpaceModel{<:Real, <:Function, <:Any}, u; multit
     #Propagate sigma points through transition
     w = SigmaWeights(SS)
     𝒳t = SigmaPoints(SS.x, SS.PU, w)
-    𝒳t = predict!(SS.fx, 𝒳t, u, multithreaded=multithreaded)
+    𝒳t = predict!(SS.fxu, 𝒳t, u, multithreaded=multithreaded)
     
     #Obtain prediction covariance
     xh = mean(𝒳t)
@@ -181,7 +181,7 @@ end
 Linear state prediction
 """
 function predict_state(SS::StateSpaceModel{<:Real, <:LinearPredictor, <:Any}, u; multithreaded=false)
-    (A, B) = (SS.fx[1], SS.fx[2])
+    (A, B) = (SS.fxu[1], SS.fxu[2])
     xh = A*SS.x + B*u
     Ph = Cholesky(root_sum_squared(SS.PU*A', SS.QU), :U, 0)
     return (xh=xh, Ph=Ph)
@@ -196,7 +196,7 @@ function update_state(SS::StateSpaceModel{<:Real, <:Any, <:Function}, y, u; mult
 
     #Propagate new predicted sigma points though observation
     𝒳 = SigmaPoints(SS.x, SS.PU, w)
-    𝒴 = predict(SS.hx, 𝒳, u, multithreaded=multithreaded)
+    𝒴 = predict(SS.hxu, 𝒳, u, multithreaded=multithreaded)
     yh = mean(𝒴)
     
     S = chol_update(SS.RU, subtract(𝒴, yh)) #Obtain cholesky of the innovation covariance
@@ -213,7 +213,7 @@ end
 Linear state updating
 """
 function update_state(SS::StateSpaceModel{<:Real, <:Any, <:LinearPredictor}, y, u; multithreaded=false)
-    (C, D) = (SS.hx[1], SS.hx[2])
+    (C, D) = (SS.hxu[1], SS.hxu[2])
     yh = C*SS.x .+ D*u
 
     S = Cholesky(root_sum_squared(SS.PU*C', SS.RU)) #Obtain cholesky of the innovation covariance
@@ -232,10 +232,10 @@ Retruns a state space model with a reduced observer space determined by the seco
 This is useful for handling missing data (where the non-missing elements are defined by "not_missing" )
 """
 function reduce_observer(SS::StateSpaceModel{T, <:Any, <:Function}, not_missing) where T
-    reduced_obsfunc(x,u) = SS.hx(x,u)[not_missing]
-    return StateSpaceModel{T, typeof(SS.fx), typeof(reduced_obsfunc)}(
-        fx = SS.fx,
-        hx = reduced_obsfunc,
+    reduced_obsfunc(x,u) = SS.hxu(x,u)[not_missing]
+    return StateSpaceModel{T, typeof(SS.fxu), typeof(reduced_obsfunc)}(
+        fxu = SS.fxu,
+        hxu = reduced_obsfunc,
         x  = SS.x,
         QU = SS.QU,
         RU = UpperTriangular(SS.RU[not_missing, not_missing]),
@@ -245,9 +245,9 @@ function reduce_observer(SS::StateSpaceModel{T, <:Any, <:Function}, not_missing)
 end
 
 function reduce_observer(SS::StateSpaceModel{T, <:Any, <:LinearPredictor}, not_missing) where T
-    return StateSpaceModel{T, typeof(SS.fx), typeof(SS.hx)}(
-        fx = SS.fx,
-        hx = (SS.hx[1][:,not_missing], SS.hx[2][:,not_missing]),
+    return StateSpaceModel{T, typeof(SS.fxu), typeof(SS.hxu)}(
+        fxu = SS.fxu,
+        hxu = (SS.hxu[1][not_missing,:], SS.hxu[2][not_missing,:]),
         x  = SS.x,
         QU = SS.QU,
         RU = UpperTriangular(SS.RU[not_missing, not_missing]),
