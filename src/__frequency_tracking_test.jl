@@ -53,16 +53,17 @@ function oscillator_prediction(X, u)
         1   0   0;
         0   0   0 
     ]
-    return exp(A*Δt)*X 
+    return exp(A*Δt)*X #Discretize A and then predict result
 end
 
-oscillator_observation(X, u) = X[1:2]
-#oscillator_observation = ([1 0 0 ; 0 1 0], zeros(2,0))
+#These methods should yield the same result
+#oscillator_observation(X, u) = X[1:2]
+oscillator_observation = ([1 0 0 ; 0 1 0], zeros(2,0))
 
 
 σ₊  = (σ+0.1)
 vsQ = [0.01*σ₊/Δt, 0.0001*σ₊, 0.1]
-vsR = [σ₊/Δt, σ₊]
+vsR = [2*σ₊/Δt, σ₊]
 vsP = [10*σ₊/Δt, 10*σ₊, 10]
 
 model = StateSpaceModel(
