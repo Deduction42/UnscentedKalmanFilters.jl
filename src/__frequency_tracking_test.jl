@@ -39,6 +39,9 @@ N  = 1000
 y  = sin.((1:N).*ω) .+ σ*randn(N)
 k0 = 100*(ω)^2
 
+#Test spike
+y[150] = 15
+
 #Test missing data after stabilization
 dy = [0; diff(y)]./Δt
 Y  = [dy'; y']
