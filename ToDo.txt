@@ -1,4 +1,1 @@
-1.  Add option to clamp innovations based on some multiple of sigma
-     -  This will prevent excessive short-term outlier chasing
-     -  Default value of 3 sigmas might be recommendable
-     -  Standard deviations can be recovered by sqrt(selfdot(SC.U[:,ii])), where selfdot(x) = dot(x,x)
+Project scope is currently complete, but new features may arise from use.
