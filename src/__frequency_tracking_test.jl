@@ -14,11 +14,17 @@ Gd = ss(A,B,C,D,1.0)
 
 tfd = tf([1, -(1+ρ²)cos(Ω₀), ρ²], [1, -2cos(Ω₀), 1], 1.0)
 =#
-
+using Revise
 using StaticArrays
 using LinearAlgebra
+using PythonPlot; pygui(true)
 
-include(joinpath(@__DIR__, "_StateSpaceModel.jl"))
+#include(joinpath(@__DIR__, "_StateSpaceModel.jl"))
+if !(@isdefined UnscentedKalmanFilters) 
+    includet(joinpath(@__DIR__, "UnscentedKalmanFilters.jl"))
+end
+
+using .UnscentedKalmanFilters
 
 @kwdef struct GaussianState
     x :: Vector{Float64}
@@ -76,6 +82,7 @@ model = StateSpaceModel(
     QU = Diagonal(vsQ),
     RU = Diagonal(vsR),
     PU = Diagonal(vsP),
+    θ  = SigmaParams(α=1.0)
 )
 #=
 model = LinearStateSpaceModel(
@@ -98,7 +105,7 @@ for ii in 1:N
     push!(vs, GaussianState(model))
 end
 
-using PythonPlot; pygui(true)
+
 figure()
 plot(y, ".k")
 plot([s.x[1] for s in vs[1:(end-1)]])

@@ -28,10 +28,10 @@ Inputs:   f: function handle for the transition function f(x)
           P: "a priori" estimated state covariance
           u: current input (can even be struct)
           y: current measurement
-          QL: process noise covariance (Lower-Triangular form)
-          RL: measurement noise covariance (Lower-Triangular form)
+          QU: process noise covariance (Upper-Triangular form)
+          RU: measurement noise covariance (Upper-Triangular form)
 Output:   x: "a posteriori" state estimate
-          PL: "a posteriori" state covariance (Lower-Triangular form)
+          PU: "a posteriori" state covariance (Upper-Triangular form)
 """
 LinearPredictor = Tuple{<:AbstractArray,<:AbstractArray}
 StatePredictor  = Union{Function, LinearPredictor}
