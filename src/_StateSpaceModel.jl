@@ -19,23 +19,19 @@ Base.@kwdef struct SigmaParams
     β :: Float64 = 2.0
 end
 
-
-"""
-https://www.seas.harvard.edu/courses/cs281/papers/unscented.pdf
-Inputs:   f: function handle for the transition function f(x)
-          h: fanction handle for the observation function h(x)
-          x: "a priori" state estimate
-          P: "a priori" estimated state covariance
-          u: current input (can even be struct)
-          y: current measurement
-          QU: process noise covariance (Upper-Triangular form)
-          RU: measurement noise covariance (Upper-Triangular form)
-Output:   x: "a posteriori" state estimate
-          PU: "a posteriori" state covariance (Upper-Triangular form)
-"""
 LinearPredictor = Tuple{<:AbstractArray,<:AbstractArray}
 StatePredictor  = Union{Function, LinearPredictor}
 
+"""
+State-Space model
+Fields:   
+    fxu: state transition function f of inputs x and u (or a tuple of two matrices for the linear version)
+    hxu: state observation function h of inputs x and u (or a tuple of two matrices for the linear version)
+    x: "a priori" state estimate
+    PU: "a priori" estimated state covariance (Upper-Triangular form)
+    QU: process noise covariance (Upper-Triangular form)
+    RU: measurement noise covariance (Upper-Triangular form)
+"""
 Base.@kwdef struct StateSpaceModel{T<:Real, F1<:StatePredictor, F2<:StatePredictor}
     fxu ::   F1
     hxu ::   F2
@@ -51,10 +47,31 @@ function StateSpaceModel(fx::F1, hx::F2, x, QU, RU, PU, θ) where {F1,F2}
     return StateSpaceModel{T, F1, F2}(fx, hx, x, QU, RU, PU, θ)
 end
 
+"""
+GaussianState: contains the canonical representation of a model's state (x = state, P = state covariance)
+"""
+@kwdef struct GaussianState
+    x :: Vector{Float64}
+    P :: Matrix{Float64}
+end
+
+function GaussianState(model::StateSpaceModel)
+    return GaussianState(
+        x = deepcopy(model.x),
+        P = model.PU'model.PU
+    )
+end
 
 """
+kalman_filter!(SS::StateSpaceModel{T}, y::AbstractVector, u; multithreaded_predict=false, multithreaded_observe=false, clamp_err=3.0) where T
+
 Applies state prediction and update functionality in-place to the state space model (does not update if there are NaN values)
-Also returns all predictions and the kalman gain for troubleshooting
+Output: Primary output mutates state-space model fields (x, PU),
+Additionaly, a NamedTuple is provided with the following fields:
+    xh: State estimate before the update (for troubleshooting)
+    Ph: State covariance before the update (for troubleshooting)
+    yh: Predicted observation (for model validation)
+    K:  Kalman gain (for troubleshooting)
 """
 function kalman_filter!(SS::StateSpaceModel{T}, y::AbstractVector, u; multithreaded_predict=false, multithreaded_observe=false, clamp_err=3.0) where T
     #Propagate sigma points through transition
@@ -68,7 +85,7 @@ end
 
 
 """
-Weights for sigma points
+Weights for sigma points, calculated from SigmaParams and the state dimension L
 """
 Base.@kwdef struct SigmaWeights
     c :: Float64
@@ -107,6 +124,7 @@ function SigmaPoints(x::AbstractVector{T}, L::LowerTriangular, w::SigmaWeights) 
     points = [(x) (x .+ A) (x .- A)]
     return SigmaPoints(points=points, weights=w)
 end
+SigmaPoints(M::AbstractMatrix{T}, w::SigmaWeights) where T = SigmaPoints{T}(M, w)
 SigmaPoints(x::AbstractVector{T}, R::UpperTriangular, w::SigmaWeights) where T<:Real = SigmaPoints(x, R', w)
 SigmaPoints(x::AbstractVector{T}, C::Cholesky, w::SigmaWeights) where T<:Real = SigmaPoints(x, C.L, w)
 
