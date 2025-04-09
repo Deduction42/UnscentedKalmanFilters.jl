@@ -1,1 +1,10 @@
-Project scope is currently complete, but new features may arise from use.
+(1) Rename this repo as "RobustUKF"
+    - Use the "asinh" trick
+(2) Separate "GaussianState" from the models
+    - kalman_filter!(state, model, u, y), look at the LowLevelParticleFilters API
+    - Special rules apply to models with immutable states and covariances
+    - Use square-root form if P is a cholesky decomposition
+    - Immutable states with a cholesky P may be best performance
+(3) Add the ability to dispatch on non square-root forms
+    - Parameterize the matrices
+    - Use Cholesky decompositions instead of triangular forms
