@@ -63,7 +63,7 @@ function GaussianState(model::StateSpaceModel)
 end
 
 """
-kalman_filter!(SS::StateSpaceModel{T}, y::AbstractVector, u; multithreaded_predict=false, multithreaded_observe=false, clamp_err=3.0) where T
+kalman_filter!(SS::StateSpaceModel{T}, y::AbstractVector, u; multithreaded_predict=false, multithreaded_observe=false, outlier=3.0) where T
 
 Applies state prediction and update functionality in-place to the state space model (does not update if there are NaN values)
 Output: Primary output mutates state-space model fields (x, PU),
@@ -73,11 +73,11 @@ Additionaly, a NamedTuple is provided with the following fields:
     yh: Predicted observation (for model validation)
     K:  Kalman gain (for troubleshooting)
 """
-function kalman_filter!(SS::StateSpaceModel{T}, y::AbstractVector, u; multithreaded_predict=false, multithreaded_observe=false, clamp_err=3.0) where T
+function kalman_filter!(SS::StateSpaceModel{T}, y::AbstractVector, u; multithreaded_predict=false, multithreaded_observe=false, outlier=3.0) where T
     #Propagate sigma points through transition
     TR = promote_type(T, Float64)
     (xh, Ph) = predict_state!(SS, u, multithreaded=multithreaded_predict)
-    (yh, K)  = update_state!(SS, y, u,  multithreaded=multithreaded_observe, clamp_err=clamp_err)
+    (yh, K)  = update_state!(SS, y, u,  multithreaded=multithreaded_observe, outlier=outlier)
 
     return (xh=xh, Ph=Ph, yh=yh, K=K)
 end
@@ -156,12 +156,12 @@ predict_observation(SS::StateSpaceModel{<:Real, <:Any, <:Function}, u) = SS.hxu(
 """
 In-place state update with automatic handling of missing observations; returns intermediate results for troubleshooting
 """
-function update_state!(SS::StateSpaceModel{T, <:Any, <:Any}, y, u; multithreaded=false, clamp_err=3.0) where T <: Real
+function update_state!(SS::StateSpaceModel{T, <:Any, <:Any}, y, u; multithreaded=false, outlier=3.0) where T <: Real
     
     if !all(isfinite, y) #Remove NaNs/Infs from the observations and model and call again
         ind = isfinite.(y)
         SR  = reduce_observer(SS, ind)
-        return update_state!(SR, y[ind], u, multithreaded=multithreaded, clamp_err=clamp_err)
+        return update_state!(SR, y[ind], u, multithreaded=multithreaded, outlier=outlier)
    
     elseif isempty(y) #No valid observations
         @warn "update_state! Warning: no observations, skipping update"
@@ -170,7 +170,7 @@ function update_state!(SS::StateSpaceModel{T, <:Any, <:Any}, y, u; multithreaded
     end
 
     #Update state space model objects
-    OBS = update_state(SS, y, u, multithreaded=multithreaded, clamp_err=clamp_err)
+    OBS = update_state(SS, y, u, multithreaded=multithreaded, outlier=outlier)
     if any(isnan, OBS.xh) | any(isnan, OBS.Ph.U)
         @warn "update_state! Warning: NaN detected in state, skipping"
     else
@@ -209,7 +209,7 @@ end
 """
 Nonlinear state updating
 """
-function update_state(SS::StateSpaceModel{<:Real, <:Any, <:Function}, y, u; multithreaded=false, clamp_err=3.0)
+function update_state(SS::StateSpaceModel{<:Real, <:Any, <:Function}, y, u; multithreaded=false, outlier=3.0)
     w = SigmaWeights(SS)
 
     #Propagate new predicted sigma points though observation
@@ -221,8 +221,8 @@ function update_state(SS::StateSpaceModel{<:Real, <:Any, <:Function}, y, u; mult
     Pxy = cov(𝒳, 𝒴) #Obtain cross-covariance of state and measurement innovations
     K = (Pxy/(S.U))/S.L #Kalman gain
 
-    σz = chol_std(S).*clamp_err
-    xh = SS.x .+ K*clamp.(y.-yh, -σz, σz)
+    σz = chol_std(S)
+    xh = SS.x .+ K*scale_innovation.(y.-yh, σz, outlier=outlier)
     Ph = chol_update!(Cholesky(copy(SS.PU),:U,0), K*S.L, -1)
 
     return (xh=xh, Ph=Ph, yh=yh, K=K)
@@ -231,7 +231,7 @@ end
 """
 Linear state updating
 """
-function update_state(SS::StateSpaceModel{<:Real, <:Any, <:LinearPredictor}, y, u; multithreaded=false, clamp_err=3.0)
+function update_state(SS::StateSpaceModel{<:Real, <:Any, <:LinearPredictor}, y, u; multithreaded=false, outlier=3.0)
     (C, D) = (SS.hxu[1], SS.hxu[2])
     yh = C*SS.x .+ D*u
 
@@ -239,8 +239,8 @@ function update_state(SS::StateSpaceModel{<:Real, <:Any, <:LinearPredictor}, y, 
     Pxy = (SS.PU'*SS.PU)*C' #Obtain cross-covariance of state and measurement innovations
     K = (Pxy/(S.U))/S.L #Kalman gain
 
-    σz = chol_std(S).*clamp_err
-    xh = SS.x .+ K*clamp.(y.-yh, -σz, σz)
+    σz = chol_std(S)
+    xh = SS.x .+ K*scale_innovation.(y.-yh, σz, outlier=outlier)
     Ph = root_sum_squared(SS.PU*(I-K*C)', SS.RU*K')
 
     return (xh=xh, Ph=Cholesky(Ph,:U,0), yh=yh, K=K)
@@ -431,7 +431,11 @@ function limit_diff!(SS::StateSpaceModel, xh; Sigmas=10.0)
     return SS
 end
 
-
+#Scale the innoviation to avoid chasing outliers
+function scale_innovation(Δy::Real, σy::Real; outlier)
+    σε = (outlier/3)*σy
+    return asinh(Δy/σε)*σε
+end
 
 
 

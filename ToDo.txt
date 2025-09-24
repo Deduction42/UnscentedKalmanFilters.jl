@@ -1,5 +1,3 @@
-(0) Use the asinh trick to reject outliers
-
 (1) Rename the repo as UnscentedTransforms to adjust the scope
     - Handling unscented transforms (for error propagation) is a lage part of the API
     - Unscended Kalman Filter is just a part of this
